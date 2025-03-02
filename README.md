@@ -1,6 +1,6 @@
 # ollama-qnx
 
-I needed an Ollama client running on QNX, but since QNX do not support Go. Since QNX 8 support Python by default, so I rewrite the Ollama "client" in Python.
+I needed an Ollama client running on QNX, but QNX do not support Go. However QNX 8 comes with Python support by default, I rewrite the Ollama "client" in Python.
 ```Console
 usage: ollama.py [-h] {create,show,run,stop,serve,pull,push,list,ps,cp,rm} ...
 
@@ -76,3 +76,6 @@ light passes through less atmosphere, but it also happens throughout the day.
 So, while the Sun emits white light with an almost infinite range of wavelengths, our eyes perceive this
 scattered blue light as the dominant color for the sky.
 ```
+
+## Others
+Even though I only tested this on QNX, but this client is implemented in python only, so it *should* also run on any OS that had python support.
