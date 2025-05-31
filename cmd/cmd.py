@@ -30,7 +30,7 @@ class Spinner:
         self.desc = desc
         self.interval = interval
         self.count = 0
-        self.tqdm = tqdm(desc=desc, total = None, bar_format = '{desc}', leave = leave)
+        self.tqdm = tqdm(desc=desc, total = None, bar_format = '{desc}', leave = leave, file = sys.stdout)
         if start:
             self.start()
 			
@@ -45,22 +45,29 @@ class Spinner:
             self.tqdm.set_description_str(f"{self.desc}{self.spinner_symbols[self.count % 4]}")
             self.count += 1
 
-    def close(self):
+    def stop(self):
         self.running = False
         self.thread.join()
+        self.tqdm.set_description_str(f"{self.desc}   ")
+
+    def close(self):
+        if (self.running):
+            self.stop()
         self.tqdm.close()
 
 class Bar:
     def __init__(self, desc, total, completed):
-        format = "{l_bar}|{bar}|{n_fmt}/{total_fmt} {rate_fmt}{postfix} {remaining}"
-        self.tqdm = tqdm(desc = desc, total = total, bar_format = format, unit_scale = 1, unit = "B")
+        format = "{l_bar}{bar}|{n_fmt}/{total_fmt} {rate_fmt}{postfix} {remaining}"
+        self.tqdm = tqdm(desc = desc, total = total, bar_format = format, unit_scale = 1, unit = "B", file = sys.stdout)
         self.completed = completed
 
     def update(self, completed):
         if completed > self.completed:
             self.tqdm.update(completed - self.completed)
             self.completed = completed
-    
+            self.tqdm.refresh()
+            sys.stdout.flush()
+   
     def close(self):
         self.tqdm.close()
 
@@ -132,7 +139,7 @@ class Cmd:
                     file_map[os.path.basename(f)] = digest
                 req['adapters'] = file_map
 
-            bars = {}
+            bars = {"order": []} 
             spinner = None
             status = ""
 
@@ -140,28 +147,28 @@ class Cmd:
                 nonlocal bars, spinner, status
                 if resp.get('digest'):
                     if spinner is not None:
-                        spinner.stop()
+                        spinner.close()
                         spinner = None
                     bar = bars.get(resp['digest'])
                     if not bar:
                         bar = Bar(f"pulling {resp['digest'][7:19]}...", resp['total'], resp['completed'])
                         bars[resp['digest']] = bar
+                        bars['order'].append(bar)
                     if 'completed' in resp:
                         bar.update(resp['completed'])
                 elif status != resp.get('status'):
                     if spinner is not None:
-                        spinner.stop()
+                        spinner.close()
                     status = resp["status"]
                     spinner = Spinner(f"{status}: ")
+                    bars['order'].append(spinner)
 
             client.create(req, progress_callback)
         except Exception as e:
             return e
 
-        if spinner is not None:
-            spinner.close()
-        for d in bars:
-            bars[d].close()
+        for d in bars['order']:
+            d.close()
 
     def create_blob(self, args, client, path, digest):
         real_path = os.path.realpath(path)
@@ -296,7 +303,7 @@ class Cmd:
 
         insecure = args.insecure
 
-        bars = {}
+        bars = {"order": []} 
         status = ""
         spinner = None
 
@@ -304,19 +311,21 @@ class Cmd:
             nonlocal status, spinner, bars
             if resp.get("digest"):
                 if spinner is not None:
-                    spinner.close()
+                    spinner.stop()
                     spinner = None
                 bar = bars.get(resp["digest"])
                 if not bar:
                     bar = Bar(f"pushing {resp['digest'][7:19]}", resp["total"], 0)
                     bars[resp["digest"]] = bar
+                    bars['order'].append(bar)
                 if "completed" in resp:
                     bar.update(resp["completed"])
             elif status != resp.get("status"):
                 if spinner is not None:
-                    spinner.close()
+                    spinner.stop()
                 status = resp["status"]
                 spinner = Spinner(f"{status}: ")
+                bars['order'].append(spinner)
 
         request = {
             "name": args.model,
@@ -333,11 +342,8 @@ class Cmd:
             sys.exit(f"Error: {e}")
 
         #p.close()
-        if spinner is not None:
-            spinner.close()
-
-        for d in bars:
-            bars[d].close()
+        for d in bars['order']:
+            d.close()
 
         destination = args.model
         if destination.endswith(".ollama.ai") or destination.endswith(".ollama.com"):
@@ -539,8 +545,8 @@ class Cmd:
             return
 
         insecure = args.insecure
-
-        bars = {}
+        
+        bars = {"order": []} 
         status = ""
         spinner = None
 
@@ -555,14 +561,16 @@ class Cmd:
                 if bar is None:
                     bar = Bar(f"pulling {resp['digest'][7:19]}", resp["total"], 0)
                     bars[resp["digest"]] = bar
+                    bars['order'].append(bar)
                 if "completed" in resp:
-                    bar.set(resp["completed"])
+                    bar.update(resp["completed"])
             else:
                 if status != resp.get("status"):
                     if spinner is not None:
-                        spinner.close()
+                        spinner.stop()
                     status = resp["status"]
                     spinner = Spinner(f"{status}: ")
+                    bars['order'].append(spinner)
 
         request = {
             "name": args.model,
@@ -579,10 +587,10 @@ class Cmd:
             return
 
         #p.close()
-        if spinner is not None:
-            spinner.close()
-        for d in bars:
-            bars[d].close()
+        #if spinner is not None:
+        #    spinner.close()
+        for d in bars['order']:
+            d.close()
 
     def display_response(self, content, word_wrap, state):
         term_width = shutil.get_terminal_size().columns
