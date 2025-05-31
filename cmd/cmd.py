@@ -12,6 +12,7 @@ from tabulate import tabulate
 import colored
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import time
 import signal
 import shutil
@@ -373,10 +374,10 @@ class Cmd:
             return
 
         models = client.list_running()
-
+        
         data = []
         for m in models["models"]:
-            if len(args) == 0 or m["name"].startswith(args[0]):
+            if (args.model is None or m["name"].startswith(args.model)):
                 proc_str = ""
                 if m["size_vram"] == 0:
                     proc_str = "100% CPU"
@@ -390,7 +391,7 @@ class Cmd:
                     proc_str = f"{cpu_percent}%/{100 - cpu_percent}% CPU/GPU"
 
                 until = "Never"
-                if m["expires_at"] < datetime.now():
+                if datetime.fromisoformat(m["expires_at"]) < datetime.now(ZoneInfo('localtime')):
                     until = "Stopping..."
                 else:
                     until = HumanTime(m["expires_at"], "Never")
@@ -852,6 +853,7 @@ class Cmd:
         list_parser.add_argument("model", nargs="?", help="Model name")
 
         ps_parser = subparsers.add_parser("ps", help="List running models")
+        ps_parser.add_argument("model", nargs="?", help="Model name")
 
         copy_parser = subparsers.add_parser("cp", help="Copy a model")
         copy_parser.add_argument("source", help="Source model")
